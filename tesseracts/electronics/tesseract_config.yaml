@@ -1,0 +1,14 @@
+name: electronics
+version: "0.1.0"
+description: |
+  Control-electronics distortion chain for superconducting-qubit drive pulses:
+  IQ mixer imbalance, finite AWG/line bandwidth, amplifier compression, and
+  bias-tee droop.
+
+  Contains no automatic-differentiation framework. The jacobian_vector_product
+  and vector_jacobian_product endpoints are derived analytically by hand and
+  implemented directly in NumPy, which places a genuine differentiation-strategy
+  boundary between this Tesseract and the JAX transmon Tesseract it composes with.
+
+build_config:
+  target_platform: "native"

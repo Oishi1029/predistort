@@ -1,0 +1,2 @@
+# Deliberately minimal: no autodiff framework lives in this container.
+numpy
