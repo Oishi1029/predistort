@@ -1,0 +1,12 @@
+name: transmon
+version: "0.1.0"
+description: |
+  Three-level transmon under a piecewise-constant drive, in the rotating frame.
+  Returns average gate infidelity on the computational subspace with leakage
+  included, averaged over an ensemble of static detunings.
+
+  All derivatives come from JAX automatic differentiation -- the opposite
+  strategy to the electronics Tesseract it composes with.
+
+build_config:
+  target_platform: "native"
