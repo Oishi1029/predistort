@@ -21,15 +21,12 @@ and a multi-second interpreter start on every process launch. Nobody ships that.
 Keeping the instrument model behind a served interface is the ordinary answer,
 and Tesseract is what makes that interface differentiable.
 
-The line response itself is BAKED INTO THE IMAGE rather than passed as an input.
-This is deliberate and it is the second half of the argument: two calibrations of
-the same instrument differ *structurally*, not just numerically -- `cal-A` is a
-3rd-order Bessel (a 2x6 SOS array) and `cal-B` adds a reflection biquad (3x6). A
-fixed-shape schema field cannot carry that difference, but two image tags can.
-The calibration is a versioned artifact, which is exactly what a container is.
+The measured line response is an INPUT, of variable section count, so one image
+can be swept across instruments. What the image pins is the *code* -- the Julia
+implementation and its hand-derived adjoint -- not one particular calibration of
+one particular fridge. A default calibration is supplied for reproducibility.
 """
 
-import os
 from typing import Any
 
 import numpy as np
@@ -46,18 +43,14 @@ from juliacall import Main as jl  # noqa: E402
 
 jl.seval("using LineChain")
 
-_CAL_TAG = os.environ.get("LINECHAIN_CAL", "cal-A")
-
-# Baked-in calibration: 3rd-order Bessel low-pass, 250 MHz, at 16 GSa/s.
-_SOS = {
-    "cal-A": np.array(
-        [
-            [0.00027851513734080725, 0.0005570302746816145,
-             0.00027851513734080725, 1.0, -0.8779714873192201, 0.0],
-            [1.0, 1.0, 0.0, 1.0, -1.7959744380069622, 0.8142334583766941],
-        ]
-    ),
-}[_CAL_TAG]
+# Default calibration: 3rd-order Bessel low-pass, 250 MHz, at 16 GSa/s.
+_SOS_DEFAULT = np.array(
+    [
+        [0.00027851513734080725, 0.0005570302746816145,
+         0.00027851513734080725, 1.0, -0.8779714873192201, 0.0],
+        [1.0, 1.0, 0.0, 1.0, -1.7959744380069622, 0.8142334583766941],
+    ]
+)
 
 UPSAMPLE = 8
 
@@ -68,6 +61,12 @@ class InputSchema(BaseModel):
     )
     envelope_q: Differentiable[Array[(None,), Float64]] = Field(
         description="Commanded quadrature DAC codes at the AWG rate, shape (n,)."
+    )
+    sos: Array[(None, 6), Float64] = Field(
+        default=_SOS_DEFAULT,
+        description="Measured line response as second-order sections, shape (K, 6) "
+        "with rows [b0 b1 b2 a0 a1 a2], at the 16 GSa/s simulation rate. Variable "
+        "K, so one image covers instruments with different section counts.",
     )
     gain_imb: Float64 = Field(default=0.020, description="IQ gain imbalance on Q.")
     phase_imb: Float64 = Field(default=0.017453, description="Quadrature skew, rad.")
@@ -91,7 +90,7 @@ class OutputSchema(BaseModel):
 def _params(inputs: InputSchema):
     return jl.LineChain.ChainParams(
         upsample=UPSAMPLE,
-        sos=_SOS,
+        sos=np.ascontiguousarray(inputs.sos, dtype=np.float64),
         gain_imb=float(inputs.gain_imb),
         phase_imb=float(inputs.phase_imb),
         lo_i=float(inputs.lo_i),

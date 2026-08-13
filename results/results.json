@@ -1,0 +1,24 @@
+{
+  "target": "X90",
+  "metric": "virtual-Z-optimal average gate infidelity, leakage-aware",
+  "arm0_drag_perfect_line": 1.4786669674249353e-06,
+  "arm1_drag_real_line": 0.0027406828591630683,
+  "arm2_classical_predistortion": 1.1799410016277712e-05,
+  "arm3_end_to_end": 0.0,
+  "gain_over_strong_baseline": 11799410016277.71,
+  "gain_over_naive": 2740682859163068.0,
+  "arm3_leakage": 0.0,
+  "arm3_evals": 27,
+  "arm3_wall_seconds": 31.904281249968335,
+  "drag_cal_ideal": {
+    "amp": 0.6095523830014282,
+    "beta": 0.5004752475349674
+  },
+  "arm2_cal": {
+    "amp": 0.6131189945594985,
+    "phase": -0.05876409884454597,
+    "beta": -0.10302564541991224
+  },
+  "peak_dac_arm3": 0.7965006549457678,
+  "u_max": 0.9
+}

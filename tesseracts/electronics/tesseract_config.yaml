@@ -64,4 +64,3 @@ env:
   PYTHON_JULIACALL_PROJECT: "/tesseract/julia"
   JULIA_DEPOT_PATH: "/opt/juliadepot"
   JULIA_NUM_THREADS: "1"
-  LINECHAIN_CAL: "cal-A"
