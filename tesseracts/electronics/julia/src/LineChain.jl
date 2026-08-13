@@ -179,6 +179,16 @@ end
 
 # ------------------------------------------------------------- full chain
 
+"""
+Entry points accept any real vector and normalise to `Vector{Float64}`.
+
+`juliacall` hands Julia a `PythonCall.PyArray`, which is an `AbstractVector` but
+not a `Vector`, so signatures pinned to `Vector{Float64}` raise `MethodError` at
+the bridge. Converting once here keeps the inner kernels concretely typed.
+"""
+forward_with_tape(ui, uq, p::ChainParams) =
+    forward_with_tape(Vector{Float64}(ui), Vector{Float64}(uq), p)
+
 function forward_with_tape(ui::Vector{Float64}, uq::Vector{Float64}, p::ChainParams)
     i1, q1 = zoh(ui, p.upsample), zoh(uq, p.upsample)
     i2, q2 = filt_sos(i1, p.sos), filt_sos(q1, p.sos)
@@ -188,6 +198,10 @@ function forward_with_tape(ui::Vector{Float64}, uq::Vector{Float64}, p::ChainPar
 end
 
 forward(ui, uq, p) = forward_with_tape(ui, uq, p)[1]
+
+chain_vjp(bi, bq, tape, p::ChainParams) =
+    chain_vjp(Vector{Float64}(bi), Vector{Float64}(bq),
+              (Vector{Float64}(tape[1]), Vector{Float64}(tape[2])), p)
 
 """Reverse mode: walk the five stages backwards, adjointing each."""
 function chain_vjp(bi::Vector{Float64}, bq::Vector{Float64},
@@ -199,6 +213,10 @@ function chain_vjp(bi::Vector{Float64}, bq::Vector{Float64},
     bi, bq = filt_sos_adj(bi, p.sos), filt_sos_adj(bq, p.sos)  # S2
     return zoh_adj(bi, p.upsample), zoh_adj(bq, p.upsample)    # S1
 end
+
+chain_jvp(ti, tq, tape, p::ChainParams) =
+    chain_jvp(Vector{Float64}(ti), Vector{Float64}(tq),
+              (Vector{Float64}(tape[1]), Vector{Float64}(tape[2])), p)
 
 """Forward mode: push a tangent through the same five stages."""
 function chain_jvp(ti::Vector{Float64}, tq::Vector{Float64},

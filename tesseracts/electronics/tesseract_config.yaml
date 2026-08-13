@@ -27,6 +27,9 @@ build_config:
 
   package_data:
     - ["julia/Project.toml", "julia/Project.toml"]
+    # Manifest is committed and copied in so the image resolves to exactly the
+    # package versions this was developed and verified against.
+    - ["julia/Manifest.toml", "julia/Manifest.toml"]
     - ["julia/src/LineChain.jl", "julia/src/LineChain.jl"]
 
   custom_build_steps:
