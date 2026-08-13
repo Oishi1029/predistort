@@ -1,72 +1,115 @@
 # predistort
 
-**Distortion-aware pulse shaping for superconducting-qubit gates, by composing two Tesseracts across a differentiation-strategy boundary.**
+**Designing a transmon X90 gate through a Julia instrument model and a JAX propagator, with one gradient.**
 
 > **Tesseract Hackathon 2026 — Track 03: Hybrid ML + mechanistic models**
-> Solo entry. Licensed under Apache-2.0.
+> Solo entry · Apache-2.0 · runs on a laptop CPU
+> Technical write-up: **[WRITEUP.md](WRITEUP.md)**
 
 ---
 
-## The problem
+## The one-paragraph version
 
-A control pulse designed for a qubit is not the pulse the qubit receives. Between the two sit real
-control electronics: a finite-bandwidth AWG, an imperfect IQ mixer, and a bias-tee that droops the
-low-frequency content away. The pulse arrives smeared, rotated, and sagging, and the gate misses.
+The pulse you design is not the pulse the qubit receives. A DAC holds samples, a
+band-limited line smears them, an IQ mixer rotates them, and an output amplifier compresses
+them. Worse, the textbook fix for leakage in a transmon — DRAG — works by adding a
+*derivative-shaped* quadrature component, and a derivative is precisely the high-frequency
+content a band-limited line destroys. So the standard solution is specifically the thing the
+electronics break. This project stops treating the instrument as an error to correct afterwards
+and differentiates *through* it: one `jax.grad` runs from gate infidelity, back through a JAX
+propagator, across a container boundary, into a **hand-derived analytic adjoint written in Julia**,
+and out onto the DAC codes.
 
-The textbook fix for leakage in a transmon is DRAG, which works by adding a *derivative-shaped*
-quadrature component. A derivative is precisely the high-frequency content a bandwidth-limited AWG
-destroys — so the standard solution is specifically the thing the electronics break.
-
-The right answer is to optimise the pulse **through** the distortion: deliberately pre-distort it,
-so that what arrives at the qubit is what you meant.
-
-## Why this needs two Tesseracts
-
-The pipeline is one differentiable function assembled from two components that cannot share a
-runtime:
+## The composition
 
 ```
-pulse parameters
-      │
-      ▼
-┌─────────────────────────────┐
-│  Tesseract A — electronics  │   causal FIR + causal IIR + IQ mixing
-│  hand-derived analytic      │   NO autodiff framework inside
-│  adjoint, NumPy only        │
-└─────────────────────────────┘
-      │  distorted (I, Q)
-      ▼
-┌─────────────────────────────┐
-│  Tesseract B — transmon     │   time-ordered propagator, three levels
-│  JAX autodiff               │   returns gate infidelity
-└─────────────────────────────┘
-      │
-      ▼
-   infidelity  ──►  a single jax.grad flows back through BOTH
+theta  ──►  u = u_max·tanh(theta), masked to a 12 ns support
+                    │  32 DAC codes per quadrature
+                    ▼
+        ┌───────────────────────────────────┐
+        │  Tesseract A — electronics        │   JULIA numerical core
+        │  hand-derived analytic adjoint    │   no AD framework in the image
+        └───────────────────────────────────┘
+                    │  256 samples per quadrature at 16 GSa/s
+                    ▼
+        ┌───────────────────────────────────┐
+        │  Tesseract B — transmon           │   JAX autodiff
+        │  three levels, Taylor propagator  │   virtual-Z-optimal infidelity
+        └───────────────────────────────────┘
+                    │
+                    ▼
+              gate infidelity
 ```
 
-The boundary is one the organisers name explicitly: **differentiation strategy**. Tesseract A's
-gradient is derived on paper and coded by hand — the adjoint of a causal convolution is an
-anti-causal correlation, and the adjoint of a causal recursion is that recursion run backwards in
-time. Tesseract B's gradient comes from JAX. Neither side's method works on the other side's
-problem.
+The boundary is **both** kinds the organisers name: *language* (Julia ↔ Python/JAX) and
+*differentiation strategy* (derived on paper ↔ automatic differentiation).
 
-## Status
+## Why this needs Tesseract and not `jax.custom_vjp`
 
-Work in progress during the 2026-08-03 → 2026-08-31 build window.
+The honest objection to any two-container differentiable pipeline is that `jax.custom_vjp`
+exists — attach a hand-written backward pass to a function JAX cannot differentiate, keep it in
+one process, delete the containers. **That objection is correct whenever the component is
+Python.** It is not correct here:
 
-Verified so far, on an Apple M1 Pro (arm64, CPU only):
+- **The core is Julia.** Collapsing this into one process means embedding a Julia runtime inside
+  the JAX process: two garbage collectors, two package managers, two threading models, and a
+  multi-second interpreter start per launch. Nobody ships that for a component that is called
+  over a socket perfectly well.
+- **The image forbids autodiff.** The build **fails** if `jax`, `torch`, `tensorflow` or
+  `autograd` can be imported inside the electronics container. The claim "these gradients are not
+  machine-generated" is enforced by the build, not asserted in prose.
+- **The chain is genuinely nonlinear.** Amplifier compression makes the Jacobian input-dependent,
+  so there is no fixed matrix to precompute and fold into JAX. Measured homogeneity violation
+  ‖f(2u) − 2f(u)‖∞ = **0.173**, where any linear chain gives exactly zero.
 
-| Check | Result |
+## Verification
+
+Every number below is measured by `make verify` on an Apple M1 Pro, CPU only.
+
+| check | result |
 |---|---|
-| Hand-derived electronics adjoint vs autodiff reference | max abs error `2.2e-16` |
-| Adjoint dot-product consistency test | relative error `5.4e-10` |
-| Propagator vs closed form (0.7π rotation against an X(π) target) | `0.137405` vs `0.137405` |
-| Resonant π pulse infidelity | `1.19e-14` |
-| Two Tesseracts under one `jax.grad`, vs finite differences taken through both containers | max relative error `6.7e-05` |
+| Julia adjoint, dot-product identity ⟨ȳ, Jv⟩ vs ⟨Jᵀȳ, v⟩ | rel **1.7e-15** |
+| Julia adjoint vs central finite differences | rel **8.0e-10** |
+| `check-gradients`, electronics, 3 endpoints @ rtol 0.02 | **0 failures / 2000 checks** each |
+| `check-gradients`, transmon, 3 endpoints @ rtol 0.02 | **0 failures / 2000 checks** each |
+| composed Julia↔JAX gradient vs finite differences **through both containers** | worst rel **1.14e-06** |
+| virtual-Z invariance of the metric, 13 angles | **0.000e+00** change |
+| propagator vs closed form (0.7π rotation vs X(π) target) | 0.137405 vs **0.137405** |
+
+## Reproducing
+
+```bash
+make env        # Python 3.12 venv via uv
+make build      # both Tesseract images (~2 min transmon, ~5 min electronics)
+make verify     # every check in the table above
+make reproduce  # the bandwidth sweep and the figure
+```
+
+Requires Docker and Julia is **not** needed on the host — it is baked into the electronics image
+(1.12.6, aarch64, precompiled into a layer, `Manifest.toml` committed).
+
+### Two things that will bite you on macOS
+
+1. **colima only mounts `$HOME`.** `Tesseract.from_image()` defaults its output directory to
+   `tempfile.mkdtemp()`, which on macOS is `/var/folders/...` — outside the VM's mounts. The bind
+   mount then lands as a root-owned empty directory and every `apply` dies with
+   `PermissionError`. Pass an explicit `output_path=` under `$HOME`.
+2. **`docker buildx` is required** and is not installed with Docker via Homebrew.
+   `brew install docker-buildx`, then symlink it into `~/.docker/cli-plugins/`.
+
+## Layout
+
+```
+tesseracts/electronics/   Tesseract A — Julia core + juliacall bridge
+  julia/src/LineChain.jl    the chain and every hand-derived adjoint
+  julia/test_adjoint.jl     standalone verification, no Python, no containers
+tesseracts/transmon/      Tesseract B — three-level transmon in JAX
+scripts/pulses.py         DRAG and the classical pre-distortion baseline
+scripts/run_sweep.py      the experiment
+scripts/verify_*.py       the checks
+```
 
 ## Licence
 
-Apache License 2.0 — see [LICENSE](LICENSE).
-
-Tesseract is a registered trademark of Pasteur Labs, Inc.
+Apache License 2.0 — see [LICENSE](LICENSE). Tesseract is a registered trademark of
+Pasteur Labs, Inc.
