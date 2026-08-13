@@ -3,7 +3,7 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 _outputs/
-results/*.npz
 .DS_Store
-figures/*.png
-figures/*.pdf
+
+# figures/ and results/ ARE committed: the README embeds the spine plot and the
+# judges' reproducibility criterion wants the measured numbers in the repo.
