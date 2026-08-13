@@ -72,7 +72,7 @@ Every number below is measured by `make verify` on an Apple M1 Pro, CPU only.
 | Julia adjoint vs central finite differences | rel **8.0e-10** |
 | `check-gradients`, electronics, 3 endpoints @ rtol 0.02 | **0 failures / 2000 checks** each |
 | `check-gradients`, transmon, 3 endpoints @ rtol 0.02 | **0 failures / 2000 checks** each |
-| composed Julia↔JAX gradient vs finite differences **through both containers** | worst rel **1.14e-06** |
+| composed Julia↔JAX gradient vs finite differences **through both containers** | worst rel **1.09e-06** |
 | virtual-Z invariance of the metric, 13 angles | **0.000e+00** change |
 | propagator vs closed form (0.7π rotation vs X(π) target) | 0.137405 vs **0.137405** |
 
@@ -82,11 +82,15 @@ Every number below is measured by `make verify` on an Apple M1 Pro, CPU only.
 make env        # Python 3.12 venv via uv
 make build      # both Tesseract images (~2 min transmon, ~5 min electronics)
 make verify     # every check in the table above
-make reproduce  # the bandwidth sweep and the figure
+make reproduce  # all three experiments and all three figures (~15 min)
 ```
 
-Requires Docker and Julia is **not** needed on the host — it is baked into the electronics image
-(1.12.6, aarch64, precompiled into a layer, `Manifest.toml` committed).
+Requires Docker. **Julia is not needed on the host to build or run anything** — 1.12.6 aarch64 is
+baked into the electronics image, precompiled into a layer, with a committed `Manifest.toml`. The
+endpoint checks run *inside* the built images for that reason. The one exception is
+`make verify-julia`, the standalone adjoint proof, which deliberately runs the Julia test outside
+any container and so needs a host Julia; skip it with `make verify-endpoints verify-composition`
+if you would rather not install one.
 
 ### Two things that will bite you on macOS
 
@@ -105,8 +109,12 @@ tesseracts/electronics/   Tesseract A — Julia core + juliacall bridge
   julia/test_adjoint.jl     standalone verification, no Python, no containers
 tesseracts/transmon/      Tesseract B — three-level transmon in JAX
 scripts/pulses.py         DRAG and the classical pre-distortion baseline
-scripts/run_sweep.py      the experiment
+scripts/run_sweep.py      the two hardness axes (--axis bandwidth | compression)
+scripts/run_robustness.py designed-vs-perturbed model, and the kappa-robust arm
 scripts/verify_*.py       the checks
+figures/spine.png         the threshold
+figures/axes.png          both axes, one shared cause
+figures/robustness.png    the robustness trade
 ```
 
 ## Licence

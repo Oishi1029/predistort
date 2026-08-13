@@ -45,17 +45,19 @@ verify-julia:
 	@echo "== Julia adjoint (standalone) =="
 	cd $(ELEC)/julia && julia --startup-file=no --project=. test_adjoint.jl
 
-## Each container against the framework's own finite-difference checker, at
-## rtol 0.02 -- five times tighter than its default.
+## Each BUILT IMAGE against the framework's own finite-difference checker, at
+## rtol 0.02 -- five times tighter than its default. Deliberately run inside the
+## containers, not on the host: that verifies the artifact we actually ship, and
+## it means a reviewer needs no Julia, no juliacall and no environment variables.
 verify-endpoints:
-	@echo "== electronics endpoints =="
-	cd $(ELEC) && $(PY) ../../$(SCRIPTS)/gradcheck_payloads.py electronics > /tmp/pl_e.json \
-		&& tesseract-runtime check-gradients "$$(cat /tmp/pl_e.json)" \
-		   --eps 1e-5 --rtol 0.02 --seed 0
-	@echo "== transmon endpoints =="
-	cd $(QUBIT) && $(PY) ../../$(SCRIPTS)/gradcheck_payloads.py transmon > /tmp/pl_t.json \
-		&& tesseract-runtime check-gradients "$$(cat /tmp/pl_t.json)" \
-		   --eps 1e-6 --rtol 0.02 --seed 0
+	@echo "== electronics endpoints (inside the image) =="
+	$(PY) $(SCRIPTS)/gradcheck_payloads.py electronics > /tmp/pl_e.json
+	$(TESS) run electronics:latest check-gradients "$$(cat /tmp/pl_e.json)" \
+		--runtime-args '--eps=1e-5 --rtol=0.02 --seed=0'
+	@echo "== transmon endpoints (inside the image) =="
+	$(PY) $(SCRIPTS)/gradcheck_payloads.py transmon > /tmp/pl_t.json
+	$(TESS) run transmon:latest check-gradients "$$(cat /tmp/pl_t.json)" \
+		--runtime-args '--eps=1e-6 --rtol=0.02 --seed=0'
 
 ## The composed gradient against central differences taken through BOTH
 ## containers -- the check that actually exercises the boundary.

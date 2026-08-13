@@ -43,7 +43,7 @@ whole chain rather than either half:
 
 | check | result |
 |---|---|
-| composed gradient, worst coordinate-wise rel. error | **1.14e-06** |
+| composed gradient, worst coordinate-wise rel. error | **1.09e-06** |
 | composed gradient, random direction | **1.64e-08** |
 | Julia adjoint alone, dot-product identity $\langle \bar y, Jv\rangle$ vs $\langle J^{\mathsf T}\bar y, v\rangle$ | **1.7e-15** |
 | `check-gradients`, both containers, 3 endpoints each, `rtol 0.02` | **0 failures / 2000** each |
