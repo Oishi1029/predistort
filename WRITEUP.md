@@ -86,28 +86,36 @@ Two further facts make the separation real rather than rhetorical:
 imported inside the electronics container. The claim "this component's gradient is not machine-
 generated" is enforced by the build, not asserted in prose.
 
-**The calibration is structural, not numerical.** The line response is baked into the image rather
-than passed as an input, because two calibrations of the same instrument differ in *shape* — a
-third-order Bessel is a 2×6 second-order-section array, and a calibration with an added reflection
-resonance is 3×6. A fixed-shape schema field cannot carry that difference; an image tag can. The
-instrument model is a versioned artifact measured per instrument by the people who own the
-hardware, and consumed by the people who own the physics. That is what a container is for.
+**The chain is genuinely nonlinear, so there is no matrix to precompute.** Without the amplifier
+compression the whole chain would be a single fixed linear operator, and a reviewer could fairly
+say: evaluate its Jacobian once, fold it into JAX as a matmul, and delete the container. With
+compression the Jacobian depends on the input. Measured homogeneity violation
+$\|f(2u) - 2f(u)\|_\infty = 0.173$, where any linear chain gives exactly zero.
+
+*What is deliberately not claimed:* an earlier version of this design baked the measured line
+response into the image, on the argument that two calibrations differ structurally (a third-order
+Bessel is a 2×6 second-order-section array; one with an added reflection resonance is 3×6) and a
+fixed-shape schema field cannot carry that. That argument is true but it was load-bearing for
+nothing, and it made the instrument impossible to sweep. The response is now an ordinary input of
+variable section count. What the image pins is the *code* — the Julia implementation and its
+hand-derived adjoint — which is the thing that actually cannot cross into the JAX process.
 
 ## 4. Gradients doing real work
 
-The optimiser controls {{N_DESIGN}} design variables — the in-phase and quadrature DAC codes over a
-12 ns support inside a 16 ns window. Amplitude limits are structural, not penalties:
+The optimiser controls 64 parameters, of which the 48 inside the drive support are free — the
+in-phase and quadrature DAC codes over a 12 ns support inside a 16 ns window. Amplitude limits
+are structural, not penalties:
 $u = u_{\max}\tanh\theta$ with $u_{\max} = 0.90$, so the DAC box cannot be violated, and the first
 and last samples are pinned to exactly zero because a real AWG waveform must start and end there.
 
 Four arms, one metric, identical constraints:
 
-| arm | what it is | infidelity |
-|---|---|---|
-| 0 | DRAG on a **perfect** line — the unreachable floor | {{ARM0}} |
-| 1 | DRAG calibrated ignoring the electronics, played through the real line | {{ARM1}} |
-| 2 | **strong baseline**: classical pre-distortion + recalibration | {{ARM2}} |
-| 3 | **this work**: end-to-end gradients through both Tesseracts | {{ARM3}} |
+| arm | what it is |
+|---|---|
+| 0 | DRAG on a **perfect** line — the unreachable floor |
+| 1 | DRAG calibrated ignoring the electronics, played through the real line |
+| 2 | **strong baseline**: classical pre-distortion + recalibration |
+| 3 | **this work**: end-to-end gradients through both Tesseracts |
 
 **Arm 2 is deliberately strong.** An entry that beats a weak baseline has proved nothing, so the
 comparison arm receives every correction a competent engineer applies before reaching for
@@ -116,14 +124,74 @@ memoryless AM/AM pre-distortion of the Rapp compressor; Tikhonov-regularised inv
 measured LTI line response; and recalibration of amplitude, drive phase and the DRAG coefficient,
 all fitted through the true chain and scored with the same metric.
 
-What arm 2 cannot do is the entire point. **The compressor sits after the line filter, so inverting
-the nonlinearity before the filter does not commute with it.** The residue is the classical memory
-effect, and removing it requires a gradient through the composed, *ordered* chain — not a cascade
-of independently inverted stages.
+### The result is a threshold, not a ratio
 
-The headline is arm 3 against arm 2, not arm 3 against arm 1: **{{GAIN}}× lower infidelity than a
-fully corrected classical baseline**, in {{EVALS}} objective evaluations and {{WALL}} of wall-clock
-on a laptop CPU.
+A single headline ratio invites the fair question *"did you pick the regime that flattered you?"*
+It also invites a second problem we hit directly: at a comfortable 250 MHz line the classical
+baseline already reaches 1.18e-5, which is roughly thirty times **below** the relaxation error a
+16 ns gate suffers at $T_1 = 50\ \mu$s ($t/T_1 = 3.2\times10^{-4}$). End-to-end optimisation there
+drives the infidelity to the float64 floor of the metric, and the improvement, while real, is
+physically unobservable. Quoting that ratio would be indefensible.
+
+So the result reported here is a **sweep over the one physical axis that genuinely varies between
+fridges, cable runs and filter stacks: the analogue bandwidth of the control line.**
+
+![the result](figures/spine.png)
+
+| line BW (MHz) | arm 1 naive | arm 2 classical | arm 3 end-to-end | peak DAC code the inverse demands | realisable? |
+|---:|---:|---:|---:|---:|:--|
+| 400 | 2.86e-3 | 1.03e-5 | < 1e-14 | 0.778 | yes |
+| 300 | 2.80e-3 | 1.16e-5 | < 1e-14 | 0.786 | yes |
+| 250 | 2.74e-3 | 1.18e-5 | < 1e-14 | 0.797 | yes |
+| 200 | 2.63e-3 | 1.20e-5 | < 1e-14 | 0.817 | yes |
+| 160 | 2.46e-3 | 1.23e-5 | < 1e-14 | 0.852 | yes |
+| 130 | 2.25e-3 | 1.27e-5 | < 1e-14 | 0.901 | **clipped** |
+| 100 | 2.04e-3 | 7.71e-5 | < 1e-14 | 1.086 | **clipped** |
+| 80 | 2.40e-3 | **3.76e-3** | < 1e-14 | 1.362 | **clipped** |
+
+The DAC box is $u_{\max} = 0.90$. End-to-end is reported as a bound, not a value: it converges to
+the float64 floor of the metric at every bandwidth, returning values between $-2\times10^{-15}$ and
+$+5\times10^{-15}$ — rounding noise about zero. **No ratio against that number would be meaningful,
+so none is quoted.** It converged in 19–68 objective evaluations at each point.
+
+**The mechanism is falsifiable and it is the point.** Inverting a low-pass line means boosting
+high-frequency content, so the narrower the line, the larger the DAC codes classical pre-emphasis
+demands. Once those codes leave the converter's range they are clipped — and *a clipped inverse is
+not an inverse*. End-to-end optimisation has no such failure mode, because the amplitude box lives
+**inside** its parameterisation ($u = u_{\max}\tanh\theta$) rather than being applied after it. The
+sweep records the demanded peak code alongside the infidelities, so the crossing can be read off
+directly.
+
+**The threshold is sharp and it lands where the mechanism predicts.** The linear inverse leaves the
+DAC box at **≈131 MHz**, interpolated from the demanded peak code. Above that, the classical stack
+is excellent — flat at ~1.2e-5 — and end-to-end optimisation buys nothing a lab could measure. We
+say so plainly: *in the comfortable regime this project's method is unnecessary.*
+
+Below it the classical stack falls apart, and it falls apart in the specific way the mechanism
+predicts rather than gracefully. At 100 MHz it has lost a factor of six. At 80 MHz it reaches
+**3.76e-3 — worse than applying no pre-distortion at all (2.40e-3)**, and an order of magnitude
+above the relaxation floor, so the failure is physically observable rather than a numerical
+curiosity. A clipped inverse does not degrade toward doing nothing; it actively does harm, because
+the pulse it produces is neither the intended one nor the uncorrected one. End-to-end optimisation
+reaches the numerical floor at every point on the sweep, including the ones where the classical
+stack has collapsed.
+
+### An honest limitation
+
+The end-to-end solution at 80 MHz buys its fidelity with aggressive pre-emphasis: it sits at the
+DAC rail for five consecutive samples and swings hard between adjacent ones. That is what
+pre-emphasis through a narrow line *must* look like, and it obeys every constraint we imposed —
+peak code 0.8991 against a 0.9 box, endpoints pinned to zero, drive confined to the 12 ns support.
+But a waveform that extreme is necessarily more sensitive to error in the instrument model than a
+gentle one, and this work does not quantify that sensitivity. **A robustness sweep — re-scoring
+each solution against perturbed line parameters — is the obvious next experiment and is not done
+here.** The claim is that the gradient finds a valid solution where the classical inverse cannot,
+not that the solution is robust to model error.
+
+There is a second, subtler reason the classical stack cannot win: **the compressor sits after the
+line filter, so inverting the nonlinearity before the filter does not commute with it.** That
+residue is the classical memory effect, and removing it needs a gradient through the composed,
+*ordered* chain rather than a cascade of independently inverted stages.
 
 ## 5. Two things that were nearly wrong
 

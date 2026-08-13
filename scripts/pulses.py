@@ -146,7 +146,7 @@ def rapp_inverse(i, q, xsat=XSAT, p=RAPP_P):
     return i * scale, q * scale
 
 
-def classical_predistort(i_des_sim, q_des_sim, lam=1e-6, sos=SOS_CAL_A):
+def classical_predistort(i_des_sim, q_des_sim, lam=1e-6, sos=SOS_CAL_A, xsat=XSAT):
     """The full classical stack, applied in the only order it can be applied.
 
     Walk the model backwards: undo the drive scale, undo the compressor
@@ -158,6 +158,6 @@ def classical_predistort(i_des_sim, q_des_sim, lam=1e-6, sos=SOS_CAL_A):
     project removes with a gradient.
     """
     a_i, a_q = i_des_sim / KAPPA, q_des_sim / KAPPA
-    b_i, b_q = rapp_inverse(a_i, a_q)
+    b_i, b_q = rapp_inverse(a_i, a_q, xsat=xsat)
     c_i, c_q = mixer_inverse(b_i, b_q)
     return tikhonov_inverse(c_i, lam, sos), tikhonov_inverse(c_q, lam, sos)

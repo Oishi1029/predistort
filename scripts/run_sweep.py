@@ -76,8 +76,10 @@ def theta_from_codes(ui, uq):
 
 
 class Pipeline:
-    def __init__(self, te, tq, sos):
-        self.te, self.tq, self.sos = te, tq, jnp.asarray(sos)
+    def __init__(self, te, tq, sos, xsat=P.XSAT):
+        self.te, self.tq = te, tq
+        self.sos = jnp.asarray(sos)
+        self.xsat = float(xsat)
 
     def _qubit(self, di, dq):
         return apply_tesseract(self.tq, {
@@ -89,7 +91,8 @@ class Pipeline:
 
     def real(self, ui, uq):
         d = apply_tesseract(self.te, {"envelope_i": ui, "envelope_q": uq,
-                                      "sos": self.sos})
+                                      "sos": self.sos,
+                                      "xsat": jnp.float64(self.xsat)})
         return self._qubit(d["drive_i"], d["drive_q"])
 
     def ideal(self, ui, uq):
@@ -109,7 +112,7 @@ def nm(obj, x0, maxfev=400):
     return r.x, float(r.fun)
 
 
-def run_point(pipe, sos, maxiter):
+def run_point(pipe, sos, maxiter, xsat=P.XSAT):
     # ---- arms 0 and 1: DRAG fitted against a perfect line ----------------
     def obj_ideal(x):
         amp, beta = x
@@ -130,7 +133,7 @@ def run_point(pipe, sos, maxiter):
         i_s, q_s = P.drag_pair(amp, beta, phase=phase)
         ui, uq = P.place(i_s, q_s)
         di, dq = P.KAPPA * P.zoh(ui), P.KAPPA * P.zoh(uq)
-        pi_, pq_ = P.classical_predistort(di, dq, sos=sos)
+        pi_, pq_ = P.classical_predistort(di, dq, sos=sos, xsat=xsat)
         mask = np.zeros(P.N_AWG)
         mask[P.SUPPORT] = 1.0
         # the DAC cannot deliver what the inverse asks for; it clips
@@ -149,7 +152,7 @@ def run_point(pipe, sos, maxiter):
     i_s, q_s = P.drag_pair(x2[0], x2[2], phase=x2[1])
     uid, uqd = P.place(i_s, q_s)
     pre_i, pre_q = P.classical_predistort(P.KAPPA * P.zoh(uid),
-                                          P.KAPPA * P.zoh(uqd), sos=sos)
+                                          P.KAPPA * P.zoh(uqd), sos=sos, xsat=xsat)
     demand = float(np.abs(np.concatenate([pre_i, pre_q])).max())
 
     # ---- arm 3: end-to-end gradients -------------------------------------
@@ -173,9 +176,19 @@ def run_point(pipe, sos, maxiter):
                 ui0=ui0, uq0=uq0, ui2=ui2, uq2=uq2, ui3=ui3, uq3=uq3)
 
 
+XSATS = [2.00, 1.40, 1.00, 0.85, 0.75, 0.68, 0.62, 0.58]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--maxiter", type=int, default=250)
+    ap.add_argument("--axis", choices=("bandwidth", "compression"),
+                    default="bandwidth",
+                    help="bandwidth: vary the line response, exactly invertible in "
+                         "principle. compression: vary the amplifier saturation "
+                         "level, which is the part no cascade of independent "
+                         "inverses can undo.")
+    ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
     OUTDIR.mkdir(parents=True, exist_ok=True)
@@ -186,23 +199,34 @@ def main():
         Tesseract.from_image("electronics:latest", output_path=OUTDIR) as te,
         Tesseract.from_image("transmon:latest", output_path=OUTDIR) as tq,
     ):
-        print(f"{'BW/MHz':>7} {'arm0 ideal':>12} {'arm1 naive':>12} "
+        if args.axis == "bandwidth":
+            points = [(bw, sos_for(bw * 1e6), P.XSAT) for bw in BANDWIDTHS_MHZ]
+            label = "BW/MHz"
+        else:
+            sos = sos_for(250e6)
+            points = [(xs, sos, xs) for xs in XSATS]
+            label = "x_sat"
+
+        print(f"{label:>7} {'arm0 ideal':>12} {'arm1 naive':>12} "
               f"{'arm2 classical':>15} {'arm3 e2e':>12} {'demand':>8} {'clip':>5}")
-        for bw in BANDWIDTHS_MHZ:
-            sos = sos_for(bw * 1e6)
+        for key, sos, xsat in points:
             t0 = time.perf_counter()
-            r = run_point(Pipeline(te, tq, sos), sos, args.maxiter)
-            r["bw_mhz"] = bw
+            r = run_point(Pipeline(te, tq, sos, xsat), sos, args.maxiter, xsat)
+            r["key"] = key
+            r["axis"] = args.axis
+            r["bw_mhz"] = key if args.axis == "bandwidth" else 250
+            r["xsat"] = xsat
             r["seconds"] = time.perf_counter() - t0
-            print(f"{bw:>7} {r['arm0']:>12.3e} {r['arm1']:>12.3e} "
+            print(f"{key:>7} {r['arm0']:>12.3e} {r['arm1']:>12.3e} "
                   f"{r['arm2']:>15.3e} {r['arm3']:>12.3e} "
                   f"{r['predistortion_demand']:>8.3f} "
                   f"{'YES' if r['clipped'] else 'no':>5}")
             for k in ("ui0", "uq0", "ui2", "uq2", "ui3", "uq3", "hist"):
-                waves[f"{k}_{bw}"] = np.asarray(r.pop(k))
+                waves[f"{k}_{key}"] = np.asarray(r.pop(k))
             rows.append(r)
 
     out = {
+        "axis": args.axis,
         "target": "X90 on a three-level transmon",
         "metric": "virtual-Z-optimal average gate infidelity, leakage-aware",
         "gate_window_ns": T_WINDOW_NS,
@@ -215,9 +239,10 @@ def main():
         },
         "sweep": rows,
     }
-    (RESULTS / "sweep.json").write_text(json.dumps(out, indent=2))
-    np.savez(RESULTS / "sweep_waveforms.npz", **waves)
-    print(f"\nwrote {RESULTS/'sweep.json'}")
+    stem = args.out or f"sweep_{args.axis}"
+    (RESULTS / f"{stem}.json").write_text(json.dumps(out, indent=2))
+    np.savez(RESULTS / f"{stem}_waveforms.npz", **waves)
+    print(f"\nwrote {RESULTS/(stem + '.json')}")
 
 
 if __name__ == "__main__":

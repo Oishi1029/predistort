@@ -1,0 +1,102 @@
+{
+  "target": "X90 on a three-level transmon",
+  "metric": "virtual-Z-optimal average gate infidelity, leakage-aware",
+  "gate_window_ns": 16.0,
+  "drive_support_ns": 12.0,
+  "u_max": 0.9,
+  "coherence_reference": {
+    "note": "transparent reference scale, not a measurement: t_window/T1",
+    "T1_us": 50.0,
+    "value": 0.00032
+  },
+  "sweep": [
+    {
+      "arm0": 1.4786669638907253e-06,
+      "arm1": 0.002859082934263605,
+      "arm2": 1.0250892279221416e-05,
+      "arm3": 5.551115123125783e-17,
+      "predistortion_demand": 0.7783792764505926,
+      "clipped": false,
+      "evals": 36,
+      "bw_mhz": 400,
+      "seconds": 27.477721709001344
+    },
+    {
+      "arm0": 1.4786669638907253e-06,
+      "arm1": 0.0027993764716593796,
+      "arm2": 1.1589868181375676e-05,
+      "arm3": 2.7200464103316335e-15,
+      "predistortion_demand": 0.7858975147138415,
+      "clipped": false,
+      "evals": 22,
+      "bw_mhz": 300,
+      "seconds": 18.715839749958832
+    },
+    {
+      "arm0": 1.4786669638907253e-06,
+      "arm1": 0.0027406848643801163,
+      "arm2": 1.1799410016518259e-05,
+      "arm3": -2.1649348980190553e-15,
+      "predistortion_demand": 0.796632863364796,
+      "clipped": false,
+      "evals": 48,
+      "bw_mhz": 250,
+      "seconds": 22.12980824999977
+    },
+    {
+      "arm0": 1.4786669638907253e-06,
+      "arm1": 0.002632015614046153,
+      "arm2": 1.1963516350965708e-05,
+      "arm3": -1.7208456881689926e-15,
+      "predistortion_demand": 0.8172025800836975,
+      "clipped": false,
+      "evals": 19,
+      "bw_mhz": 200,
+      "seconds": 19.303454541019164
+    },
+    {
+      "arm0": 1.4786669638907253e-06,
+      "arm1": 0.0024621520640209504,
+      "arm2": 1.2329991209425462e-05,
+      "arm3": 7.956598343146955e-16,
+      "predistortion_demand": 0.8517411924313572,
+      "clipped": false,
+      "evals": 33,
+      "bw_mhz": 160,
+      "seconds": 21.76249520794954
+    },
+    {
+      "arm0": 1.4786669638907253e-06,
+      "arm1": 0.002249199150028469,
+      "arm2": 1.2701521665603455e-05,
+      "arm3": -8.326672684688674e-16,
+      "predistortion_demand": 0.9009755286266762,
+      "clipped": true,
+      "evals": 67,
+      "bw_mhz": 130,
+      "seconds": 22.623551124997903
+    },
+    {
+      "arm0": 1.4786669638907253e-06,
+      "arm1": 0.002043486304046438,
+      "arm2": 7.705747881786573e-05,
+      "arm3": 4.496403249731884e-15,
+      "predistortion_demand": 1.0864043515574529,
+      "clipped": true,
+      "evals": 44,
+      "bw_mhz": 100,
+      "seconds": 23.929494916985277
+    },
+    {
+      "arm0": 1.4786669638907253e-06,
+      "arm1": 0.0023954306059414026,
+      "arm2": 0.0037626217765504935,
+      "arm3": -8.326672684688674e-16,
+      "predistortion_demand": 1.3620664172678094,
+      "clipped": true,
+      "evals": 68,
+      "bw_mhz": 80,
+      "seconds": 27.15568141703261
+    }
+  ]
+}

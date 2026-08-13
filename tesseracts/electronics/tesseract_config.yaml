@@ -13,10 +13,9 @@ description: |
   and the JAX transmon Tesseract it composes with, and it is a boundary
   jax.custom_vjp cannot cross.
 
-  The line-response calibration is baked into the image rather than passed as an
-  input, because two calibrations of the same instrument differ structurally
-  (different numbers of biquad sections), which a fixed-shape schema field cannot
-  express but an image tag can.
+  The measured line response is an input of variable section count, so one image
+  covers instruments with different numbers of biquad sections. What the image
+  pins is the code and its hand-derived adjoint, not one fridge's calibration.
 
 build_config:
   target_platform: "native"
