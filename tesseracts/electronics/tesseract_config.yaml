@@ -1,14 +1,64 @@
 name: electronics
-version: "0.1.0"
+version: "0.2.0"
 description: |
-  Control-electronics distortion chain for superconducting-qubit drive pulses:
-  IQ mixer imbalance, finite AWG/line bandwidth, amplifier compression, and
-  bias-tee droop.
+  Control-electronics line for superconducting-qubit XY drive: DAC zero-order
+  hold, baseband line response (biquad SOS cascade), IQ mixer imbalance and LO
+  leakage, Rapp amplifier compression on the complex envelope magnitude, drive
+  scaling.
 
-  Contains no automatic-differentiation framework. The jacobian_vector_product
-  and vector_jacobian_product endpoints are derived analytically by hand and
-  implemented directly in NumPy, which places a genuine differentiation-strategy
-  boundary between this Tesseract and the JAX transmon Tesseract it composes with.
+  The numerical core is a Julia module. There is no automatic-differentiation
+  package anywhere in this image -- the jacobian_vector_product and
+  vector_jacobian_product endpoints are derived analytically by hand. That places
+  a boundary of both LANGUAGE and DIFFERENTIATION STRATEGY between this Tesseract
+  and the JAX transmon Tesseract it composes with, and it is a boundary
+  jax.custom_vjp cannot cross.
+
+  The line-response calibration is baked into the image rather than passed as an
+  input, because two calibrations of the same instrument differ structurally
+  (different numbers of biquad sections), which a fixed-shape schema field cannot
+  express but an image tag can.
 
 build_config:
   target_platform: "native"
+
+  extra_packages:
+    - curl
+    - ca-certificates
+
+  package_data:
+    - ["julia/Project.toml", "julia/Project.toml"]
+    - ["julia/src/LineChain.jl", "julia/src/LineChain.jl"]
+
+  custom_build_steps:
+    # Julia toolchain, aarch64, pinned to the version used during development
+    - |
+      RUN curl -fsSL https://julialang-s3.julialang.org/bin/linux/aarch64/1.12/julia-1.12.6-linux-aarch64.tar.gz \
+            -o /tmp/julia.tar.gz && \
+          mkdir -p /opt/julia && \
+          tar -xzf /tmp/julia.tar.gz -C /opt/julia --strip-components=1 && \
+          rm /tmp/julia.tar.gz && \
+          /opt/julia/bin/julia --version
+
+    # Resolve and precompile into an image layer so serve-time is a load, not a
+    # compile. The depot must be world-writable: the runtime is not root.
+    - |
+      RUN JULIA_DEPOT_PATH=/opt/juliadepot \
+          /opt/julia/bin/julia --project=/tesseract/julia -e \
+            'using Pkg; Pkg.instantiate(); Pkg.precompile()' && \
+          chmod -R 777 /opt/juliadepot
+
+    # Guard the central claim: no autodiff framework may enter this image.
+    - |
+      RUN python -c "import importlib.util,sys; \
+          bad=[m for m in ('jax','torch','tensorflow','autograd') if importlib.util.find_spec(m)]; \
+          sys.exit('AD framework leaked into the electronics image: %s' % bad) if bad else print('no-AD guard: OK')"
+
+env:
+  PYTHON_JULIAPKG_EXE: "/opt/julia/bin/julia"
+  PYTHON_JULIAPKG_PROJECT: "/tesseract/julia"
+  PYTHON_JULIAPKG_OFFLINE: "yes"
+  PYTHON_JULIACALL_EXE: "/opt/julia/bin/julia"
+  PYTHON_JULIACALL_PROJECT: "/tesseract/julia"
+  JULIA_DEPOT_PATH: "/opt/juliadepot"
+  JULIA_NUM_THREADS: "1"
+  LINECHAIN_CAL: "cal-A"

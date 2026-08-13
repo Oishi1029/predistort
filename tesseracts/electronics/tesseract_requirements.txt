@@ -1,2 +1,4 @@
-# Deliberately minimal: no autodiff framework lives in this container.
+# Deliberately minimal. No autodiff framework is permitted in this image --
+# the build enforces it with an explicit guard step.
 numpy
+juliacall

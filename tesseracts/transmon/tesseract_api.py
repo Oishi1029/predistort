@@ -65,19 +65,23 @@ _P01 = jnp.diag(jnp.array([1.0, 1.0, 0.0])).astype(jnp.complex128)
 
 class InputSchema(BaseModel):
     drive_i: Differentiable[Array[(None,), Float64]] = Field(
-        description="In-phase drive delivered to the qubit, rad/s, shape (n,)."
+        description="In-phase drive delivered to the qubit, rad/ns, shape (n,)."
     )
     drive_q: Differentiable[Array[(None,), Float64]] = Field(
-        description="Quadrature drive delivered to the qubit, rad/s, shape (n,)."
+        description="Quadrature drive delivered to the qubit, rad/ns, shape (n,)."
     )
-    dt: Float64 = Field(description="Duration of one piecewise-constant slice, seconds.")
+    dt: Float64 = Field(
+        description="Duration of one piecewise-constant slice, ns. Units are rad/ns "
+        "and ns throughout, matching the electronics Tesseract upstream."
+    )
     anharmonicity: Float64 = Field(
-        default=-1.5707963267948966e9,
-        description="Transmon anharmonicity alpha in rad/s (2*pi*-250 MHz).",
+        default=-1.8849555921538759,
+        description="Transmon anharmonicity alpha in rad/ns (2*pi*-300 MHz).",
     )
     detunings: Array[(None,), Float64] = Field(
-        description="Ensemble of static detunings in rad/s to average over. "
-        "A single-element array gives the nominal, non-robust objective."
+        description="Static detunings in rad/ns to average over. A single-element "
+        "array [0.0] gives the nominal on-resonance objective, which is the "
+        "default; a spread is used only for the post-hoc robustness sweep."
     )
     target_angle: Float64 = Field(
         default=3.141592653589793,
@@ -147,11 +151,33 @@ def _propagate(di, dq, dt, alpha, delta):
 
 
 def _metrics_one(di, dq, dt, alpha, delta, angle):
+    """Average gate infidelity on span{|0>,|1>}, maximised over a free virtual Z.
+
+    A physical lab implements Z rotations by relabelling the phase of every
+    subsequent pulse, which costs nothing and takes no time. A figure of merit
+    that charges for a Z error therefore reports an error the lab does not
+    actually suffer -- it would flatter or punish arms of this experiment
+    according to how much Z drift each happened to accumulate. So the overlap is
+    maximised in closed form over one virtual Z applied after the gate.
+
+    With Z(-phi) = diag(1, e^{-i phi}) on the computational subspace and
+    c = diag(M M_target^dag),
+
+        tr(M_target^dag Z(-phi) M) = c_0 + e^{-i phi} c_1
+
+    whose modulus is maximised at |c_0| + |c_1|. No search is needed, and the
+    result stays differentiable.
+    """
     u = _propagate(di, dq, dt, alpha, delta)
     m = _P01 @ u @ _P01
     mt = _P01 @ _target(angle) @ _P01
     d = 2.0
-    ov = jnp.abs(jnp.trace(mt.conj().T @ m)) ** 2
+
+    c = jnp.diag(m @ mt.conj().T)[:2]
+    # guard |.| at exactly zero, where the derivative of abs is undefined
+    mag = jnp.sqrt(jnp.real(c * c.conj()) + 1e-300)
+    ov = (mag[0] + mag[1]) ** 2
+
     tr_mm = jnp.real(jnp.trace(m.conj().T @ m))
     infid = 1.0 - (ov + tr_mm) / (d * (d + 1.0))
     # population leaving {|0>,|1>}, averaged over the two computational inputs
