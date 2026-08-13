@@ -185,7 +185,14 @@ def _metrics_one(di, dq, dt, alpha, delta, angle):
     return infid, leak
 
 
+@jax.jit
 def _metrics(di, dq, dt, alpha, detunings, angle):
+    """JIT is not cosmetic here.
+
+    Without it every endpoint call re-traces the 256-step scan op by op, and the
+    optimisation loop makes thousands of calls. Compilation is cached per input
+    shape, so the cost is paid once per served container.
+    """
     infid, leak = jax.vmap(
         lambda de: _metrics_one(di, dq, dt, alpha, de, angle)
     )(detunings)
