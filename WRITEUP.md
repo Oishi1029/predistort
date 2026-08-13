@@ -210,7 +210,16 @@ installed alongside Docker via Homebrew. A third is worth stating for anyone bui
 Tesseract: the container must `jax.jit` its own hot path — leaving it eager cost **575.6 ms vs
 4.7 ms** per value+grad here, a 123× difference that turned a 4-minute sweep into 45 minutes.
 
-Built for arm64; an amd64 build path is documented.
+**Portability.** Both Tesseracts use `target_platform: "native"`, so `make build` produces an
+image for whatever architecture the host is. The Julia toolchain download is selected from
+`uname -m` at build time rather than hardcoded, so an x86_64 reviewer gets an x86_64 Julia
+automatically. Everything reported here was built and verified on arm64; the x86 branch is the same
+code path but has not been exercised on x86 hardware, and I would rather say that than imply a test
+I did not run.
+
+**Reproduced from a clean clone.** `git clone` into an empty directory, then
+`make env && make build && make verify`: both images build and every check passes, including the
+composed-gradient error reproducing to the same 1.09e-06.
 
 ## 9. Disclosure
 

@@ -32,9 +32,19 @@ build_config:
     - ["julia/src/LineChain.jl", "julia/src/LineChain.jl"]
 
   custom_build_steps:
-    # Julia toolchain, aarch64, pinned to the version used during development
+    # Julia toolchain, pinned to the version used during development, with the
+    # download selected from the BUILD ARCHITECTURE rather than hardcoded.
+    # target_platform is "native", so this image is arm64 on Apple silicon and
+    # amd64 on an x86 host -- and a hardcoded aarch64 tarball would make the
+    # build fail outright for any reviewer on x86.
     - |
-      RUN curl -fsSL https://julialang-s3.julialang.org/bin/linux/aarch64/1.12/julia-1.12.6-linux-aarch64.tar.gz \
+      RUN set -eu; \
+          case "$(uname -m)" in \
+            aarch64|arm64) JDIR=aarch64; JTAG=aarch64 ;; \
+            x86_64|amd64)  JDIR=x64;     JTAG=x86_64  ;; \
+            *) echo "unsupported build architecture: $(uname -m)" >&2; exit 1 ;; \
+          esac; \
+          curl -fsSL "https://julialang-s3.julialang.org/bin/linux/${JDIR}/1.12/julia-1.12.6-linux-${JTAG}.tar.gz" \
             -o /tmp/julia.tar.gz && \
           mkdir -p /opt/julia && \
           tar -xzf /tmp/julia.tar.gz -C /opt/julia --strip-components=1 && \

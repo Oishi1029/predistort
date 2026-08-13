@@ -101,6 +101,17 @@ if you would rather not install one.
 2. **`docker buildx` is required** and is not installed with Docker via Homebrew.
    `brew install docker-buildx`, then symlink it into `~/.docker/cli-plugins/`.
 
+### Architecture
+
+Both Tesseracts build for the host platform (`target_platform: "native"`), and the electronics
+image picks its Julia toolchain from `uname -m` at build time, so an x86_64 host gets an x86_64
+Julia without touching anything. Built and verified here on arm64; the x86 branch is the same code
+path but has not been run on x86 hardware.
+
+This repo was checked by cloning it into an empty directory and running
+`make env && make build && make verify` from scratch — both images build and every check above
+passes, with the composed-gradient error reproducing to the same 1.09e-06.
+
 ## Layout
 
 ```
