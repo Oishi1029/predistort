@@ -113,6 +113,31 @@ float64 floor at every point, in 19–68 objective evaluations.
 *End-to-end is reported as a bound, never a value.* It returns between $-2\times10^{-15}$ and
 $+5\times10^{-15}$ — rounding noise about zero. **No ratio against it is quoted anywhere.**
 
+### The same failure on an independent axis
+
+Bandwidth and amplifier compression are separate knobs, and the classical stack has an exact inverse
+for each *in isolation*. Sweeping compression instead of bandwidth (line held at 250 MHz) confirms
+that, and then fails the same way:
+
+| $x_{sat}$ | 2.0 | 1.0 | 0.85 | 0.75 | 0.68 | 0.62 | 0.58 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| naive | 1.02e-4 | 2.74e-3 | 4.96e-3 | 7.56e-3 | 1.03e-2 | 1.36e-2 | 1.64e-2 |
+| classical | 1.19e-5 | 1.18e-5 | 1.06e-5 | 2.74e-5 | 9.96e-5 | 3.00e-3 | **9.12e-2** |
+| DAC demand | 0.65 | 0.80 | 0.92 | 1.24 | 2.96 | 2.63 | **1654** |
+
+The memoryless AM/AM inverse is exact, so the classical stack barely notices compression down to
+$x_{sat}=0.85$ — better evidence for the baseline's quality than anything asserted. Then it
+collapses to 9.12e-2, five times worse than doing nothing, because **once the required output
+exceeds what the amplifier can physically produce, the inverse does not exist**: it demands 1654×
+the DAC range.
+
+![both axes](figures/axes.png)
+
+Two independent mechanisms, one shared cause. **The classical approach needs an inverse that may lie
+outside the hardware's reachable set; the optimiser only ever searches inside it.** That is the
+whole argument for differentiating through the instrument, and it is why the amplitude box belongs
+in the parameterisation rather than in a post-hoc clip.
+
 ## 5. Is the aggressive solution fragile? Measured, not asserted
 
 The 80 MHz solution sits at the DAC rail for five consecutive samples. A waveform that extreme

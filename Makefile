@@ -65,11 +65,15 @@ verify-composition:
 
 # ------------------------------------------------------------- reproduce
 reproduce:
-	cd $(SCRIPTS) && $(PY) -u run_sweep.py --maxiter 250
+	cd $(SCRIPTS) && $(PY) -u run_sweep.py --axis bandwidth   --maxiter 250 --out sweep
+	cd $(SCRIPTS) && $(PY) -u run_sweep.py --axis compression --maxiter 250
+	cd $(SCRIPTS) && $(PY) -u run_robustness.py --maxiter 250
 	$(MAKE) figures
 
 figures:
 	cd $(SCRIPTS) && $(PY) make_figures.py
+	cd $(SCRIPTS) && $(PY) make_axes_figure.py
+	cd $(SCRIPTS) && $(PY) make_robustness_figure.py
 
 clean-images:
 	-docker rmi electronics:latest electronics:0.2.0 transmon:latest transmon:0.1.0
