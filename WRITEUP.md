@@ -176,24 +176,50 @@ the pulse it produces is neither the intended one nor the uncorrected one. End-t
 reaches the numerical floor at every point on the sweep, including the ones where the classical
 stack has collapsed.
 
-### An honest limitation
+## 5. Is the aggressive solution fragile? Measured, not asserted
 
-The end-to-end solution at 80 MHz buys its fidelity with aggressive pre-emphasis: it sits at the
-DAC rail for five consecutive samples and swings hard between adjacent ones. That is what
-pre-emphasis through a narrow line *must* look like, and it obeys every constraint we imposed —
-peak code 0.8991 against a 0.9 box, endpoints pinned to zero, drive confined to the 12 ns support.
-But a waveform that extreme is necessarily more sensitive to error in the instrument model than a
-gentle one, and this work does not quantify that sensitivity. **A robustness sweep — re-scoring
-each solution against perturbed line parameters — is the obvious next experiment and is not done
-here.** The claim is that the gradient finds a valid solution where the classical inverse cannot,
-not that the solution is robust to model error.
+The end-to-end pulse at 80 MHz buys its fidelity with aggressive pre-emphasis: five samples pinned
+at the DAC rail, large swings between neighbours. It obeys every constraint imposed — peak code
+0.8991 against a 0.90 box, endpoints exactly zero, drive confined to the 12 ns support — but a
+waveform that extreme *ought* to be sensitive to error in the model it was designed against. So we
+designed every arm against the nominal model and scored it against a perturbed one.
+
+**It is tolerant of a mis-measured line.** Mis-estimate the bandwidth by ±20% and the end-to-end
+pulse degrades to 1.5e-4 — still **16× better than the classical stack** at the same point, and
+still at or below the relaxation floor. The fear was wrong.
+
+**It is sensitive to drive-amplitude drift**, which is the one parameter a lab knows it cannot
+hold. A 5% error in $\kappa$ costs it 1.0e-3.
+
+That sensitivity has an obvious fix that costs nothing structural: keep the same two Tesseracts,
+evaluate the loss at several $\kappa$ values, and average. The gradient flows through every ensemble
+member, so it is the identical composition doing strictly more work. Optimising over
+$\kappa \in \{-4\%, 0, +4\%\}$:
+
+| perturbation | end-to-end | end-to-end, $\kappa$-robust | |
+|---|---:|---:|---|
+| nominal | < 1e-14 | 3.87e-6 | the price of insurance |
+| $\kappa$ −5% | 1.02e-3 | 5.33e-4 | **1.9× better** |
+| $\kappa$ +5% | 1.02e-3 | 4.49e-4 | **2.3× better** |
+| line BW −20% | 1.47e-4 | 7.20e-3 | **49× worse** |
+| line BW +20% | 7.79e-5 | 3.31e-3 | **43× worse** |
+
+**Robustness is not a scalar, and this is the paper's most useful negative result.** Hardening
+against drive-amplitude drift did exactly what it was asked to — roughly halving the error across
+the $\kappa$ range — and in doing so traded away a factor of forty in tolerance to line-model
+error. The ensemble pushed the optimiser into a different corner of the design space, one that
+happens to be far more sensitive to the parameter it was not told to worry about.
+
+The correct response is to put both uncertainties in the ensemble, which the same composition
+supports without modification. **That is not done here**, and any claim about a jointly robust
+solution would be unsupported by these measurements.
 
 There is a second, subtler reason the classical stack cannot win: **the compressor sits after the
 line filter, so inverting the nonlinearity before the filter does not commute with it.** That
 residue is the classical memory effect, and removing it needs a gradient through the composed,
 *ordered* chain rather than a cascade of independently inverted stages.
 
-## 5. Two things that were nearly wrong
+## 6. Two things that were nearly wrong
 
 **The metric.** Fidelity is maximised in closed form over a free virtual Z. A physical lab
 implements Z rotations by relabelling the phase of every subsequent pulse — it is free and
@@ -210,7 +236,7 @@ where a real AWG waveform must start and end, while the forward pass looks perfe
 code: **2 NaNs with `eigh`, 0 with a fixed-order Taylor exponential.** Order 12 truncates at
 6.9e-13 and the full-gate unitarity error is 3.8e-11.
 
-## 6. The adjoint, derived
+## 7. The adjoint, derived
 
 Component A's derivatives are the technical core, so they are stated in full. The chain is
 zero-order hold → biquad line response → IQ mixer → Rapp compression → drive scale.
@@ -253,7 +279,7 @@ dot-product test   <ybar, Jv>  vs  <J^T ybar, v>     relative error  1.7e-15
 JVP vs central finite differences                    relative error  8.0e-10
 ```
 
-## 7. Reproducibility
+## 8. Reproducibility
 
 Everything runs on a laptop CPU. `make verify` reproduces every check quoted above; `make reproduce`
 regenerates the results table and the figure from scratch.
@@ -267,7 +293,7 @@ regenerates the results table and the figure from scratch.
   the images are built for the host platform, and a `linux/amd64` build path is documented in the
   README.
 
-## 8. Disclosure
+## 9. Disclosure
 
 Built solo with AI-assisted development (Anthropic Claude) for code generation, drafting and
 documentation. The problem framing, composition design, gradient verification and all reported
