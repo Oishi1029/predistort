@@ -66,7 +66,7 @@ Python.** It is not correct here:
 
 ## Verification
 
-Every number below is measured by `make verify` on an Apple M1 Pro, CPU only.
+Every number below is measured on an Apple M1 Pro, CPU only. The first five rows are what `make verify` runs on every invocation, and on every CI push.
 
 | check | result |
 |---|---|
@@ -75,6 +75,11 @@ Every number below is measured by `make verify` on an Apple M1 Pro, CPU only.
 | `check-gradients`, electronics, 3 endpoints @ rtol 0.02 | **0 failures / 2000 checks** each |
 | `check-gradients`, transmon, 3 endpoints @ rtol 0.02 | **0 failures / 2000 checks** each |
 | composed Julia↔JAX gradient vs finite differences **through both containers** | worst rel **1.09e-06** |
+
+The last two checks were run once during development and are **not** part of `make verify`:
+
+| one-off development check | result |
+|---|---|
 | virtual-Z invariance of the metric, 13 angles | **0.000e+00** change |
 | propagator vs closed form (0.7π rotation vs X(π) target) | 0.137405 vs **0.137405** |
 
@@ -83,12 +88,12 @@ Every number below is measured by `make verify` on an Apple M1 Pro, CPU only.
 ```bash
 make env        # Python 3.12 venv via uv
 make build      # both Tesseract images (~2 min transmon, ~5 min electronics)
-make verify     # every check in the table above
+make verify     # the Julia adjoint, both endpoint suites, and the composed gradient
 make reproduce  # all three experiments and all three figures (~15 min)
 ```
 
-Requires Docker. **Julia is not needed on the host to build or run anything** — 1.12.6 aarch64 is
-baked into the electronics image, precompiled into a layer, with a committed `Manifest.toml`. The
+Requires Docker. **Julia is not needed on the host to build or run anything** — Julia 1.12.6 for
+the build host's architecture is baked into the electronics image, precompiled into a layer, with a committed `Manifest.toml`. The
 endpoint checks run *inside* the built images for that reason. The one exception is
 `make verify-julia`, the standalone adjoint proof, which deliberately runs the Julia test outside
 any container and so needs a host Julia; skip it with `make verify-endpoints verify-composition`
@@ -109,7 +114,7 @@ Both Tesseracts build for the host platform (`target_platform: "native"`), and t
 image picks its Julia toolchain from `uname -m` at build time, so an x86_64 host gets an x86_64
 Julia without touching anything. Developed and measured here on arm64 (Apple M1 Pro). **The x86_64
 path is now exercised on every push** by the `verify` workflow on a GitHub `ubuntu-latest` runner:
-it builds both images from scratch and runs every check in the table above. On x86_64 the composed
+it builds both images from scratch and runs `make verify` end to end. On x86_64 the composed
 Julia↔JAX gradient agrees with central finite differences to worst rel **9.55e-07** — the same check
 that gives 1.09e-06 here, both far inside the 1e-5 tolerance the script asserts.
 

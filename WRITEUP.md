@@ -199,8 +199,8 @@ Component A's derivatives are all derived on paper; the full derivation is the m
 ## 8. Reproducibility
 
 `make env && make build && make verify && make reproduce`, all on a laptop CPU. Julia is not needed
-on the host — 1.12.6 aarch64 is baked into the electronics image, precompiled into a layer, with a
-committed `Manifest.toml`. Seeds fixed; `results/*.json` committed. Transport costs 11 ms per
+on the host — Julia 1.12.6 for the build host's architecture is baked into the electronics image,
+precompiled into a layer, with a committed `Manifest.toml`. Seeds fixed; `results/*.json` committed. Transport costs 11 ms per
 `apply` and 26 ms per gradient call, so one optimiser step through both containers is 60–70 ms.
 
 Two traps cost real time and are documented in the README: colima only mounts `$HOME`, so
@@ -213,9 +213,11 @@ Tesseract: the container must `jax.jit` its own hot path — leaving it eager co
 **Portability.** Both Tesseracts use `target_platform: "native"`, so `make build` produces an
 image for whatever architecture the host is. The Julia toolchain download is selected from
 `uname -m` at build time rather than hardcoded, so an x86_64 reviewer gets an x86_64 Julia
-automatically. Everything reported here was built and verified on arm64; the x86 branch is the same
-code path but has not been exercised on x86 hardware, and I would rather say that than imply a test
-I did not run.
+automatically. Every number reported here was measured on arm64 (Apple M1 Pro). The x86_64 path is
+no longer untested: the `verify` workflow builds both images from scratch on a GitHub
+`ubuntu-latest` runner and runs `make verify` on every push, and there the composed gradient agrees
+with central finite differences to worst rel **9.55e-07**, against 1.09e-06 here — both far inside
+the 1e-5 the script asserts.
 
 **Reproduced from a clean clone.** `git clone` into an empty directory, then
 `make env && make build && make verify`: both images build and every check passes, including the
