@@ -1,3 +1,5 @@
+[![verify](https://github.com/Oishi1029/predistort/actions/workflows/verify.yml/badge.svg)](https://github.com/Oishi1029/predistort/actions/workflows/verify.yml)
+
 # predistort
 
 **Designing a transmon X90 gate through a Julia instrument model and a JAX propagator, with one gradient.**
@@ -105,12 +107,16 @@ if you would rather not install one.
 
 Both Tesseracts build for the host platform (`target_platform: "native"`), and the electronics
 image picks its Julia toolchain from `uname -m` at build time, so an x86_64 host gets an x86_64
-Julia without touching anything. Built and verified here on arm64; the x86 branch is the same code
-path but has not been run on x86 hardware.
+Julia without touching anything. Developed and measured here on arm64 (Apple M1 Pro). **The x86_64
+path is now exercised on every push** by the `verify` workflow on a GitHub `ubuntu-latest` runner:
+it builds both images from scratch and runs every check in the table above. On x86_64 the composed
+Julia↔JAX gradient agrees with central finite differences to worst rel **9.55e-07** — the same check
+that gives 1.09e-06 here, both far inside the 1e-5 tolerance the script asserts.
 
 This repo was checked by cloning it into an empty directory and running
 `make env && make build && make verify` from scratch — both images build and every check above
-passes, with the composed-gradient error reproducing to the same 1.09e-06.
+passes, with the composed-gradient error reproducing to the same 1.09e-06. The same sequence runs
+unattended in CI on a machine that is not mine, on a different architecture, on every push.
 
 ## Layout
 
